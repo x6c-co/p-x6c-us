@@ -27,7 +27,7 @@ type Paste struct {
 	Nonce         []byte
 	Ciphertext    []byte
 	CreatedAt     time.Time
-	ExpiresAt     time.Time
+	ExpiresAt     time.Time // the zero time means never
 	BurnAfterRead bool
 }
 
@@ -52,7 +52,7 @@ var schema = []string{
 		nonce           TEXT NOT NULL,
 		ciphertext      TEXT NOT NULL,
 		created_at      INTEGER NOT NULL,
-		expires_at      INTEGER NOT NULL,
+		expires_at      INTEGER NOT NULL, -- 0: never expires
 		burn_after_read INTEGER NOT NULL DEFAULT 0
 	)`,
 	`CREATE INDEX IF NOT EXISTS pastes_expires_at ON pastes (expires_at)`,
@@ -91,7 +91,7 @@ func (s *Store) CreatePaste(ctx context.Context, p Paste) error {
 	_, err := s.exec(ctx,
 		`INSERT INTO pastes (id, key_id, nonce, ciphertext, created_at, expires_at, burn_after_read)
 		 VALUES (?, ?, ?, ?, ?, ?, ?)`,
-		p.ID, p.KeyID, b64(p.Nonce), b64(p.Ciphertext), p.CreatedAt.Unix(), p.ExpiresAt.Unix(), p.BurnAfterRead)
+		p.ID, p.KeyID, b64(p.Nonce), b64(p.Ciphertext), p.CreatedAt.Unix(), unixOrZero(p.ExpiresAt), p.BurnAfterRead)
 	if err != nil && strings.Contains(err.Error(), "UNIQUE constraint failed: pastes.id") {
 		return ErrDuplicateID
 	}
@@ -102,7 +102,7 @@ func (s *Store) CreatePaste(ctx context.Context, p Paste) error {
 func (s *Store) Paste(ctx context.Context, id string, now time.Time) (*Paste, error) {
 	rows, err := s.query(ctx,
 		`SELECT key_id, nonce, ciphertext, created_at, expires_at, burn_after_read
-		 FROM pastes WHERE id = ? AND expires_at > ?`, id, now.Unix())
+		 FROM pastes WHERE id = ? AND (expires_at = 0 OR expires_at > ?)`, id, now.Unix())
 	if err != nil {
 		return nil, err
 	}
@@ -110,13 +110,17 @@ func (s *Store) Paste(ctx context.Context, id string, now time.Time) (*Paste, er
 		return nil, ErrNotFound
 	}
 	r := row(rows[0])
+	var expires time.Time
+	if e := r.int(4); e != 0 {
+		expires = time.Unix(e, 0)
+	}
 	p := &Paste{
 		ID:            id,
 		KeyID:         r.str(0),
 		Nonce:         r.bytes(1),
 		Ciphertext:    r.bytes(2),
 		CreatedAt:     time.Unix(r.int(3), 0),
-		ExpiresAt:     time.Unix(r.int(4), 0),
+		ExpiresAt:     expires,
 		BurnAfterRead: r.int(5) != 0,
 	}
 	return p, r.err
@@ -131,7 +135,7 @@ func (s *Store) DeletePaste(ctx context.Context, id string) (bool, error) {
 
 // Sweep deletes every paste that has expired by now and returns how many.
 func (s *Store) Sweep(ctx context.Context, now time.Time) (int64, error) {
-	res, err := s.exec(ctx, `DELETE FROM pastes WHERE expires_at <= ?`, now.Unix())
+	res, err := s.exec(ctx, `DELETE FROM pastes WHERE expires_at > 0 AND expires_at <= ?`, now.Unix())
 	return res.RowsAffected, err
 }
 
@@ -192,6 +196,14 @@ func execError(resp *rqlite.ExecuteResponse) error {
 }
 
 func b64(b []byte) string { return base64.StdEncoding.EncodeToString(b) }
+
+// unixOrZero stores the zero time ("never") as 0.
+func unixOrZero(t time.Time) int64 {
+	if t.IsZero() {
+		return 0
+	}
+	return t.Unix()
+}
 
 // row decodes one result row, keeping the first error so callers check once.
 type rowDecoder struct {

@@ -42,7 +42,7 @@ func (m *memPastes) Paste(_ context.Context, id string, now time.Time) (*store.P
 	m.mu.Lock()
 	defer m.mu.Unlock()
 	p, ok := m.pastes[id]
-	if !ok || !p.ExpiresAt.After(now) {
+	if !ok || (!p.ExpiresAt.IsZero() && !p.ExpiresAt.After(now)) {
 		return nil, store.ErrNotFound
 	}
 	return &p, nil
@@ -194,6 +194,30 @@ func TestAPICreate(t *testing.T) {
 	h.now = h.now.Add(time.Hour)
 	if rec := h.get(path); rec.Code != http.StatusNotFound {
 		t.Fatalf("after expiry: %d, want 404", rec.Code)
+	}
+}
+
+func TestNeverExpires(t *testing.T) {
+	h := newHarness(t, nil)
+	path := h.createAPI("?expiry=never", "forever")
+	if p := h.pastes.pastes[strings.TrimPrefix(path, "/")]; !p.ExpiresAt.IsZero() {
+		t.Fatalf("stored expiry %v, want the zero time", p.ExpiresAt)
+	}
+	rec := h.get(path)
+	if rec.Code != 200 || !strings.Contains(rec.Body.String(), "never expires") {
+		t.Fatalf("view: %d, want a page saying it never expires", rec.Code)
+	}
+	h.now = h.now.AddDate(100, 0, 0)
+	if got := h.get("/raw" + path); got.Code != 200 || got.Body.String() != "forever" {
+		t.Fatalf("raw a century later: %d %q", got.Code, got.Body)
+	}
+
+	rec = h.post("/", url.Values{"content": {"form forever"}, "expiry": {"never"}})
+	if rec.Code != http.StatusSeeOther {
+		t.Fatalf("form create with never: %d", rec.Code)
+	}
+	if !strings.Contains(h.get("/").Body.String(), `<option value="never">Never</option>`) {
+		t.Fatal("form has no Never option")
 	}
 }
 

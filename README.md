@@ -5,7 +5,7 @@ with a data key protected by [rypt.dev](https://rypt.dev). Anyone can create a
 paste; anyone with its link can read it until it expires.
 
 - Text only (UTF-8, no NUL bytes), up to 256 KiB.
-- Expiry of 10 minutes, 1 hour, 1 day (default), 1 week or 30 days.
+- Expiry of 10 minutes, 1 hour, 1 day (default), 1 week, 30 days or never.
 - Optional delete-after-first-view.
 - Paste IDs are UUIDv4 by default; ULID and short random IDs are available.
 
@@ -23,8 +23,8 @@ curl https://p.x6c.us/raw/<id>          # the text, exactly as sent
 some-command | curl --data-binary @- 'https://p.x6c.us/api/paste?burn=1'
 ```
 
-`expiry` is one of `10m`, `1h`, `1d`, `1w`, `30d` (default `1d`). `burn=1`
-deletes the paste the first time it is read.
+`expiry` is one of `10m`, `1h`, `1d`, `1w`, `30d`, `never` (default `1d`).
+`burn=1` deletes the paste the first time it is read.
 
 A delete-after-first-view paste opened in a browser first shows a "View and
 delete" button, because link previews (Slack, iMessage, scanners) fetch links
@@ -69,7 +69,9 @@ doesn't.)
 ### Deleted pastes
 
 Expired pastes are deleted by a sweep every minute, and are never served once
-past their expiry. A deleted paste's ciphertext can remain in rqlite's Raft log
+past their expiry. Pastes created with `never` are stored with `expires_at = 0`
+and stay until burned or deleted by hand; anyone can create them, so they are
+what the database grows with. A deleted paste's ciphertext can remain in rqlite's Raft log
 and snapshots until they are compacted, but it stays encrypted there.
 
 ## Configuration

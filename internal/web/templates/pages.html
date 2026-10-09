@@ -53,7 +53,7 @@
 
 {{define "view"}}{{template "top" .}}
 {{if .Burned}}<p class="notice" role="status">This paste has now been deleted. Copy anything you need before leaving this page.</p>{{end}}
-<p class="meta">Created {{utc .Created}}{{if not .Burned}} · expires {{utc .Expires}} · <a href="{{.RawURL}}">raw</a>{{end}}</p>
+<p class="meta">Created {{utc .Created}}{{if not .Burned}} · {{if .Expires.IsZero}}never expires{{else}}expires {{utc .Expires}}{{end}} · <a href="{{.RawURL}}">raw</a>{{end}}</p>
 <pre>{{.Content}}</pre>
 {{template "bottom" .}}{{end}}
 

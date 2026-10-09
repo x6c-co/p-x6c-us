@@ -66,7 +66,7 @@ type Server struct {
 
 type expiryOption struct {
 	Value, Label string
-	TTL          time.Duration
+	TTL          time.Duration // 0 means the paste never expires
 }
 
 var expiries = []expiryOption{
@@ -75,6 +75,7 @@ var expiries = []expiryOption{
 	{"1d", "1 day", 24 * time.Hour},
 	{"1w", "1 week", 7 * 24 * time.Hour},
 	{"30d", "30 days", 30 * 24 * time.Hour},
+	{"never", "Never", 0},
 }
 
 const defaultExpiry = "1d"
@@ -253,15 +254,15 @@ func (s *Server) tooLarge() *userError {
 
 // create validates, rate-limits, seals and stores a paste, returning its ID.
 func (s *Server) create(r *http.Request, content []byte, expiry string, burn bool) (string, error) {
-	var ttl time.Duration
-	for _, e := range expiries {
-		if e.Value == expiry {
-			ttl = e.TTL
+	var opt *expiryOption
+	for i := range expiries {
+		if expiries[i].Value == expiry {
+			opt = &expiries[i]
 		}
 	}
 	switch {
-	case ttl == 0:
-		return "", &userError{http.StatusBadRequest, "Unknown expiry; use 10m, 1h, 1d, 1w or 30d."}
+	case opt == nil:
+		return "", &userError{http.StatusBadRequest, "Unknown expiry; use 10m, 1h, 1d, 1w, 30d or never."}
 	case len(bytes.TrimSpace(content)) == 0:
 		return "", &userError{http.StatusBadRequest, "The paste is empty."}
 	case len(content) > s.MaxBytes:
@@ -273,6 +274,10 @@ func (s *Server) create(r *http.Request, content []byte, expiry string, burn boo
 	if !s.limiter.allow(limitKey(s.clientIP(r)), now) {
 		return "", &userError{http.StatusTooManyRequests, "Too many pastes from your address; try again in a few minutes."}
 	}
+	var expires time.Time // the zero time means never
+	if opt.TTL > 0 {
+		expires = now.Add(opt.TTL)
+	}
 	// A clash is only plausible with short IDs, but a new ID needs a new
 	// seal because the ID is bound into the ciphertext.
 	for range 3 {
@@ -280,7 +285,7 @@ func (s *Server) create(r *http.Request, content []byte, expiry string, burn boo
 		keyID, nonce, ct := s.Ring.Seal(id, content)
 		err := s.Pastes.CreatePaste(r.Context(), store.Paste{
 			ID: id, KeyID: keyID, Nonce: nonce, Ciphertext: ct,
-			CreatedAt: now, ExpiresAt: now.Add(ttl), BurnAfterRead: burn,
+			CreatedAt: now, ExpiresAt: expires, BurnAfterRead: burn,
 		})
 		if !errors.Is(err, store.ErrDuplicateID) {
 			return id, err

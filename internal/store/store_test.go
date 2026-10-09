@@ -126,6 +126,27 @@ func TestSweep(t *testing.T) {
 	}
 }
 
+func TestNeverExpires(t *testing.T) {
+	s, ctx := open(t), context.Background()
+	k := addKey(t, s)
+	now := time.Now()
+	p := Paste{ID: uuid.NewString(), KeyID: k.ID, CreatedAt: now} // zero ExpiresAt: never
+	if err := s.CreatePaste(ctx, p); err != nil {
+		t.Fatal(err)
+	}
+	later := now.AddDate(100, 0, 0)
+	if _, err := s.Sweep(ctx, later); err != nil {
+		t.Fatal(err)
+	}
+	got, err := s.Paste(ctx, p.ID, later)
+	if err != nil {
+		t.Fatalf("never-expiring paste a century later: %v", err)
+	}
+	if !got.ExpiresAt.IsZero() {
+		t.Fatalf("ExpiresAt = %v, want the zero time", got.ExpiresAt)
+	}
+}
+
 func TestDataKeysOrdered(t *testing.T) {
 	s, ctx := open(t), context.Background()
 	a := addKey(t, s)

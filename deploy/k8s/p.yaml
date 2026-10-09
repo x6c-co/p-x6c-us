@@ -2,8 +2,7 @@
 #   - rqlite at rqlite.rqlite.svc.cluster.local (opskit),
 #   - Traefik as the default IngressClass and cert-manager's `letsencrypt`
 #     ClusterIssuer,
-#   - two Secrets in namespace p, created by hand (see README.md):
-#     `p-rypt` and `ghcr-pull`.
+#   - the Secret `p-rypt` in namespace p, created by hand (see README.md).
 apiVersion: v1
 kind: Namespace
 metadata:
@@ -26,8 +25,6 @@ spec:
       labels:
         app.kubernetes.io/name: p
     spec:
-      imagePullSecrets:
-        - name: ghcr-pull
       securityContext:
         runAsNonRoot: true
         seccompProfile:

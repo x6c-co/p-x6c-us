@@ -99,27 +99,25 @@ so keep them at 10 or more.
 ## Deploying (Vultr VKE)
 
 The cluster runs rqlite, Traefik and cert-manager (see the opskit repo).
-`deploy/k8s/p.yaml` has everything else apart from two Secrets in namespace
-`p`, which you create once by hand:
+`deploy/k8s/p.yaml` has everything else apart from one Secret in namespace
+`p`, which you create once by hand. The image is public, so pulling it needs
+no credentials.
 
 ```sh
 export KUBECONFIG=~/.kube/vultr-config
 
 # rypt: create a key and an API key in https://dashboard.rypt.dev/
+kubectl create namespace p
 kubectl -n p create secret generic p-rypt \
   --from-literal=P_RYPT_KEY_ID=<key uuid> \
   --from-literal=P_RYPT_TOKEN=<ry_… api key>
 
-# GHCR: a GitHub token with read:packages, since the image is private
-kubectl -n p create secret docker-registry ghcr-pull \
-  --docker-server=ghcr.io --docker-username=<github user> \
-  --docker-password=<token>
-
 kubectl apply -f deploy/k8s/p.yaml
 ```
 
-DNS: `p.x6c.us` needs A records for the node IPs (Traefik listens on 80/443 on
-every node). cert-manager issues the certificate once the name resolves.
+DNS: `p.x6c.us` needs an A record for the cluster's Vultr load balancer
+(Traefik's LoadBalancer Service). cert-manager issues the certificate once the
+name resolves.
 
 ### Releasing
 

@@ -65,6 +65,13 @@ spec:
               path: /healthz
               port: http
             periodSeconds: 20
+          # Keep serving for a while after being told to stop: Traefik takes
+          # a few seconds to drop a terminating pod, and requests it sends
+          # to a pod that has already exited hang until they time out.
+          lifecycle:
+            preStop:
+              sleep:
+                seconds: 10
           securityContext:
             allowPrivilegeEscalation: false
             readOnlyRootFilesystem: true

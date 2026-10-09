@@ -1,0 +1,119 @@
+:root {
+  --bg: #fbfbfa;
+  --fg: #1d1d1b;
+  --muted: #6b6b66;
+  --line: #d9d9d4;
+  --field: #ffffff;
+  --accent: #2456c8;
+  --error: #b42318;
+  --notice: #8a5a00;
+  color-scheme: light dark;
+}
+
+@media (prefers-color-scheme: dark) {
+  :root {
+    --bg: #161615;
+    --fg: #e8e8e3;
+    --muted: #9a9a94;
+    --line: #34342f;
+    --field: #1f1f1d;
+    --accent: #7ea2ff;
+    --error: #ff8a7a;
+    --notice: #f2c45a;
+  }
+}
+
+* { box-sizing: border-box; }
+
+body {
+  margin: 0;
+  background: var(--bg);
+  color: var(--fg);
+  font: 16px/1.5 system-ui, -apple-system, "Segoe UI", sans-serif;
+}
+
+header, main {
+  max-width: 64rem;
+  margin: 0 auto;
+  padding: 0 16px;
+}
+
+header { padding-top: 16px; padding-bottom: 8px; }
+
+.brand {
+  color: var(--fg);
+  font-weight: 700;
+  text-decoration: none;
+}
+
+a { color: var(--accent); }
+
+h1 { font-size: 1.25rem; margin: 1rem 0 .5rem; }
+
+textarea, pre, code, .link {
+  font: 14px/1.5 ui-monospace, "SF Mono", Menlo, Consolas, monospace;
+}
+
+textarea {
+  width: 100%;
+  min-height: 60vh;
+  padding: 12px;
+  resize: vertical;
+  background: var(--field);
+  color: var(--fg);
+  border: 1px solid var(--line);
+  border-radius: 4px;
+  tab-size: 4;
+}
+
+pre {
+  margin: 0 0 2rem;
+  padding: 12px;
+  overflow-x: auto;
+  white-space: pre;
+  background: var(--field);
+  border: 1px solid var(--line);
+  border-radius: 4px;
+  tab-size: 4;
+}
+
+.controls {
+  display: flex;
+  flex-wrap: wrap;
+  gap: 12px 20px;
+  align-items: center;
+  margin: 12px 0;
+}
+
+select, button, .link {
+  font-size: 15px;
+  padding: 6px 10px;
+  border: 1px solid var(--line);
+  border-radius: 4px;
+  background: var(--field);
+  color: var(--fg);
+}
+
+button {
+  background: var(--accent);
+  border-color: var(--accent);
+  color: var(--bg);
+  font-weight: 600;
+  cursor: pointer;
+}
+
+.link { width: 100%; }
+
+.meta, .hint { color: var(--muted); font-size: 14px; }
+.hint code { overflow-wrap: anywhere; }
+.error { color: var(--error); font-weight: 600; }
+.notice { color: var(--notice); font-weight: 600; }
+
+.sr-only {
+  position: absolute;
+  width: 1px;
+  height: 1px;
+  overflow: hidden;
+  clip: rect(0 0 0 0);
+  white-space: nowrap;
+}

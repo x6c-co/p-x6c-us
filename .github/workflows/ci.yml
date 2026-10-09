@@ -1,0 +1,55 @@
+name: ci
+
+on:
+  push:
+    branches: [main]
+  pull_request:
+
+concurrency:
+  group: ci-${{ github.workflow }}-${{ github.ref }}
+  cancel-in-progress: true
+
+permissions:
+  contents: read
+
+env:
+  RQLITE_VERSION: v10.5.3
+  RQLITE_SHA256: 93dc04417d9d233e79eb359e325793b1f92daa84ec93694953f4bff6307fda2b
+
+jobs:
+  go:
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/checkout@9c091bb21b7c1c1d1991bb908d89e4e9dddfe3e0 # v7.0.0
+
+      - uses: actions/setup-go@924ae3a1cded613372ab5595356fb5720e22ba16 # v6.5.0
+        with:
+          go-version-file: go.mod
+
+      - uses: golangci/golangci-lint-action@ba0d7d2ec06a0ea1cb5fa41b2e4a3ab91d21278a # v9.3.0
+        with:
+          version: v2.13
+
+      - run: go vet ./...
+
+      - name: install govulncheck
+        run: go install golang.org/x/vuln/cmd/govulncheck@v1.2.0
+
+      - run: govulncheck ./...
+
+      # The store tests need a real rqlite, run with foreign keys on as the
+      # cluster's is.
+      - name: start rqlite
+        run: |
+          set -euo pipefail
+          f="rqlite-${RQLITE_VERSION}-linux-amd64"
+          curl -fsSLO "https://github.com/rqlite/rqlite/releases/download/${RQLITE_VERSION}/${f}.tar.gz"
+          echo "${RQLITE_SHA256}  ${f}.tar.gz" | sha256sum -c
+          tar -xzf "${f}.tar.gz"
+          "./${f}/rqlited" -fk=true -http-addr 127.0.0.1:4001 -raft-addr 127.0.0.1:4002 "$RUNNER_TEMP/rqlite" &
+          for _ in $(seq 30); do curl -fs 127.0.0.1:4001/readyz && exit 0; sleep 1; done
+          exit 1
+
+      - run: go test ./...
+        env:
+          P_TEST_RQLITE_URL: http://127.0.0.1:4001

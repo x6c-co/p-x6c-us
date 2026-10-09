@@ -1,0 +1,64 @@
+{{define "top"}}<!doctype html>
+<html lang="en">
+<head>
+<meta charset="utf-8">
+<meta name="viewport" content="width=device-width, initial-scale=1">
+<meta name="robots" content="noindex, nofollow">
+<title>{{.Title}} · {{.Site}}</title>
+<link rel="stylesheet" href="/static/style.css">
+</head>
+<body>
+<header><a class="brand" href="/">{{.Site}}</a></header>
+<main>
+{{end}}
+
+{{define "bottom"}}
+</main>
+</body>
+</html>
+{{end}}
+
+{{define "index"}}{{template "top" .}}
+<form method="post" action="/">
+  {{if .Error}}<p class="error" role="alert">{{.Error}}</p>{{end}}
+  <label for="content" class="sr-only">Paste</label>
+  <textarea id="content" name="content" required autofocus spellcheck="false" placeholder="Paste text here">{{.Content}}</textarea>
+  <div class="controls">
+    <label>Expires after
+      <select name="expiry">
+        {{$cur := .Expiry}}{{range .Expiries}}<option value="{{.Value}}"{{if eq .Value $cur}} selected{{end}}>{{.Label}}</option>{{end}}
+      </select>
+    </label>
+    <label><input type="checkbox" name="burn"{{if .Burn}} checked{{end}}> Delete after first view</label>
+    <button type="submit">Create paste</button>
+  </div>
+  <p class="hint">Text only, up to {{.MaxKiB}} KiB. Stored encrypted. From a terminal:
+    <code>curl --data-binary @file '{{.CurlURL}}?expiry=1d'</code></p>
+</form>
+{{template "bottom" .}}{{end}}
+
+{{define "created"}}{{template "top" .}}
+<h1>Paste created</h1>
+<p>It will be deleted the first time someone opens it, so share the link without opening it yourself.</p>
+<p><input class="link" type="text" readonly value="{{.URL}}" aria-label="Paste link"></p>
+{{template "bottom" .}}{{end}}
+
+{{define "confirm"}}{{template "top" .}}
+<h1>Burn after reading</h1>
+<p>This paste will be deleted as soon as you view it.</p>
+<form method="post" action="/{{.ID}}">
+  <button type="submit">View and delete</button>
+</form>
+{{template "bottom" .}}{{end}}
+
+{{define "view"}}{{template "top" .}}
+{{if .Burned}}<p class="notice" role="status">This paste has now been deleted. Copy anything you need before leaving this page.</p>{{end}}
+<p class="meta">Created {{utc .Created}}{{if not .Burned}} · expires {{utc .Expires}} · <a href="{{.RawURL}}">raw</a>{{end}}</p>
+<pre>{{.Content}}</pre>
+{{template "bottom" .}}{{end}}
+
+{{define "message"}}{{template "top" .}}
+<h1>{{.Title}}</h1>
+<p>{{.Message}}</p>
+<p><a href="/">New paste</a></p>
+{{template "bottom" .}}{{end}}

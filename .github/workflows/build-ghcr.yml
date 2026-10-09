@@ -1,0 +1,33 @@
+# Builds the image and pushes it to GitHub Container Registry on a version
+# tag. The cluster pulls ghcr.io/x6c-co/p-x6c-us:<tag>; see deploy/k8s.
+name: build-ghcr
+
+on:
+  push:
+    tags: ["v*"]
+  workflow_dispatch: {}
+
+permissions:
+  contents: read
+  packages: write
+
+jobs:
+  build:
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/checkout@9c091bb21b7c1c1d1991bb908d89e4e9dddfe3e0 # v7.0.0
+
+      - name: Log in to GHCR
+        run: echo "${{ secrets.GITHUB_TOKEN }}" | docker login ghcr.io -u "${{ github.actor }}" --password-stdin
+
+      - name: Build and push image
+        run: |
+          set -euo pipefail
+          IMAGE="ghcr.io/${{ github.repository }}"
+          TAG="${{ github.ref_name }}"
+          # workflow_dispatch has no tag ref; fall back to the short SHA.
+          if [ "${{ github.ref_type }}" != "tag" ]; then TAG="sha-${GITHUB_SHA::7}"; fi
+          docker build --build-arg VERSION="$TAG" -t "$IMAGE:$TAG" -t "$IMAGE:latest" .
+          docker push "$IMAGE:$TAG"
+          docker push "$IMAGE:latest"
+          echo "Pushed $IMAGE:$TAG and $IMAGE:latest"

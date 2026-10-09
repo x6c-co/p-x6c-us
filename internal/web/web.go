@@ -6,6 +6,7 @@ import (
 	"bytes"
 	"context"
 	"embed"
+	"encoding/json"
 	"errors"
 	"fmt"
 	"html/template"
@@ -53,6 +54,13 @@ type Config struct {
 	CreateBurst int
 	CreateEvery time.Duration
 
+	// AltchaKey, when set, makes the browser form require a solved ALTCHA
+	// proof-of-work challenge, HMAC-signed with this key. AltchaMaxNumber
+	// sets the work: on average the browser hashes half that many times.
+	// The curl API is not covered; only the rate limit applies to it.
+	AltchaKey       string
+	AltchaMaxNumber int64
+
 	Log *slog.Logger
 	Now func() time.Time // defaults to time.Now
 }
@@ -62,6 +70,7 @@ type Server struct {
 	site    string
 	tmpl    *template.Template
 	limiter *limiter
+	altcha  *verifier // nil when AltchaKey is unset
 }
 
 type expiryOption struct {
@@ -103,13 +112,27 @@ func New(cfg Config) (*Server, error) {
 		site:    u.Host,
 		tmpl:    tmpl,
 		limiter: newLimiter(cfg.CreateEvery, cfg.CreateBurst),
+		altcha:  altchaVerifier(cfg),
 	}, nil
+}
+
+func altchaVerifier(cfg Config) *verifier {
+	if cfg.AltchaKey == "" {
+		return nil
+	}
+	// Long enough to write a paste in: the widget solves a challenge as soon
+	// as the form loads (auto="onload"; "onfocus" never fires, because the
+	// textarea is already focused by the time the widget starts).
+	return newVerifier(cfg.AltchaKey, cfg.AltchaMaxNumber, 30*time.Minute)
 }
 
 func (s *Server) Handler() http.Handler {
 	mux := http.NewServeMux()
 	mux.HandleFunc("GET /{$}", s.index)
 	mux.HandleFunc("POST /{$}", s.createForm)
+	if s.altcha != nil {
+		mux.HandleFunc("GET /altcha", s.altchaChallenge)
+	}
 	mux.HandleFunc("POST /api/paste", s.createAPI)
 	mux.HandleFunc("GET /raw/{id}", s.raw)
 	mux.HandleFunc("GET /{id}", s.view)
@@ -159,6 +182,8 @@ type page struct {
 	Burned           bool
 
 	Message string
+
+	Altcha bool // load the ALTCHA widget on the form
 }
 
 func (s *Server) page(title string) page {
@@ -166,13 +191,36 @@ func (s *Server) page(title string) page {
 }
 
 func (s *Server) index(w http.ResponseWriter, r *http.Request) {
-	s.render(w, http.StatusOK, "index", s.form(page{}))
+	s.renderForm(w, http.StatusOK, page{})
+}
+
+// renderForm shows the paste form. With ALTCHA on, it relaxes the CSP just
+// enough for the widget: its script, its worker and the challenge fetch, all
+// from this origin. Every other page keeps the default, which allows no
+// script at all.
+func (s *Server) renderForm(w http.ResponseWriter, status int, p page) {
+	if s.altcha != nil {
+		w.Header().Set("Content-Security-Policy", "default-src 'none'; script-src 'self'; worker-src 'self'; connect-src 'self'; style-src 'self'; form-action 'self'; frame-ancestors 'none'; base-uri 'none'")
+	}
+	s.render(w, status, "index", s.form(p))
+}
+
+// altchaChallenge hands the widget a new challenge.
+func (s *Server) altchaChallenge(w http.ResponseWriter, r *http.Request) {
+	c, err := s.altcha.challenge(s.Now())
+	if err != nil {
+		s.serverError(w, r, true, "creating ALTCHA challenge", err)
+		return
+	}
+	noStore(w)
+	w.Header().Set("Content-Type", "application/json")
+	_ = json.NewEncoder(w).Encode(c)
 }
 
 // form fills in what the paste form needs, keeping anything already in p
 // (such as the content of a rejected submission).
 func (s *Server) form(p page) page {
-	p.Site, p.Title = s.site, "New paste"
+	p.Site, p.Title, p.Altcha = s.site, "New paste", s.altcha != nil
 	p.Expiries, p.MaxKiB, p.CurlURL = expiries, s.MaxBytes/1024, s.BaseURL+"/api/paste"
 	if p.Expiry == "" {
 		p.Expiry = defaultExpiry
@@ -204,10 +252,14 @@ func (s *Server) createForm(w http.ResponseWriter, r *http.Request) {
 	content := strings.ReplaceAll(r.PostForm.Get("content"), "\r\n", "\n")
 	expiry, burn := r.PostForm.Get("expiry"), r.PostForm.Get("burn") != ""
 
-	id, err := s.create(r, []byte(content), expiry, burn)
+	var id string
+	err := s.checkAltcha(r)
+	if err == nil {
+		id, err = s.create(r, []byte(content), expiry, burn)
+	}
 	if err != nil {
 		status, msg := s.createFailure(r, err)
-		s.render(w, status, "index", s.form(page{Error: msg, Content: content, Expiry: expiry, Burn: burn}))
+		s.renderForm(w, status, page{Error: msg, Content: content, Expiry: expiry, Burn: burn})
 		return
 	}
 	if !burn {
@@ -220,6 +272,14 @@ func (s *Server) createForm(w http.ResponseWriter, r *http.Request) {
 	p := s.page("Paste created")
 	p.ID, p.URL = id, s.BaseURL+"/"+id
 	s.render(w, http.StatusCreated, "created", p)
+}
+
+// checkAltcha checks the form's ALTCHA answer, when ALTCHA is on.
+func (s *Server) checkAltcha(r *http.Request) error {
+	if s.altcha == nil || s.altcha.verify(r.PostForm.Get("altcha"), s.Now()) {
+		return nil
+	}
+	return &userError{http.StatusBadRequest, "The verification check did not pass; try again. It needs JavaScript."}
 }
 
 // createAPI takes the raw request body as the paste, for curl:

@@ -104,6 +104,15 @@ button {
 
 .link { width: 100%; }
 
+/* The ALTCHA widget (static/altcha) takes its colors from these. */
+altcha-widget {
+  display: block;
+  margin-top: 12px;
+  --altcha-color-base: var(--field);
+  --altcha-color-base-content: var(--fg);
+  --altcha-border-color: var(--line);
+}
+
 .meta, .hint { color: var(--muted); font-size: 14px; }
 .hint code { overflow-wrap: anywhere; }
 .error { color: var(--error); font-weight: 600; }

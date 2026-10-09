@@ -6,7 +6,9 @@
 <meta name="robots" content="noindex, nofollow">
 <title>{{.Title}} · {{.Site}}</title>
 <link rel="stylesheet" href="/static/style.css">
-</head>
+{{if .Altcha}}<link rel="stylesheet" href="/static/altcha/altcha.css">
+<script type="module" src="/static/altcha/init.js"></script>
+{{end}}</head>
 <body>
 <header><a class="brand" href="/">{{.Site}}</a></header>
 <main>
@@ -23,6 +25,8 @@
   {{if .Error}}<p class="error" role="alert">{{.Error}}</p>{{end}}
   <label for="content" class="sr-only">Paste</label>
   <textarea id="content" name="content" required autofocus spellcheck="false" placeholder="Paste text here">{{.Content}}</textarea>
+  {{if .Altcha}}<altcha-widget challenge="/altcha" auto="onload"></altcha-widget>
+  <noscript><p class="error">Creating a paste here needs JavaScript, for a short proof-of-work check. From a terminal, use curl as shown below.</p></noscript>{{end}}
   <div class="controls">
     <label>Expires after
       <select name="expiry">

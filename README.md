@@ -34,6 +34,24 @@ from a terminal is the view.
 Creating pastes is limited per client IP (per /64 for IPv6): 10 at once, then
 one every 2 minutes.
 
+### Spam protection
+
+The browser form also requires a solved [ALTCHA](https://altcha.org)
+challenge: a small proof-of-work that the page's script does in Web Workers
+(well under a second on a laptop) before the form submits. The server hands
+out challenges at `GET /altcha`, signs each with `P_ALTCHA_HMAC_KEY`, lets it
+live 30 minutes, and accepts each answer once. This raises the cost of form
+spam; it does not prove the sender is a person. Creating a paste in the
+browser therefore needs JavaScript; reading one never does.
+
+The curl API is not covered: only the per-IP limit applies to it.
+
+The widget is vendored in `internal/web/static/altcha`: altcha 3.3.0's
+strict-CSP build (`dist/external/altcha.min.js` and `altcha.css`) and
+`dist/workers/sha.js`, under its MIT licence. To update it, copy those files
+and `LICENSE.txt` from a newer `altcha` npm package. Only the form page's CSP
+allows scripts, and only from this origin.
+
 ## How encryption works
 
 ```
@@ -69,10 +87,11 @@ doesn't.)
 ### Deleted pastes
 
 Expired pastes are deleted by a sweep every minute, and are never served once
-past their expiry. Pastes created with `never` are stored with `expires_at = 0`
-and stay until burned or deleted by hand; anyone can create them, so they are
-what the database grows with. A deleted paste's ciphertext can remain in rqlite's Raft log
-and snapshots until they are compacted, but it stays encrypted there.
+past their expiry. Pastes created with `never` are stored with
+`expires_at = 0` and stay until burned or deleted by hand; anyone can create
+them, so they are what the database grows with. A deleted paste's ciphertext
+can remain in rqlite's Raft log and snapshots until they are compacted, but it
+stays encrypted there.
 
 ## Configuration
 
@@ -92,6 +111,8 @@ All configuration is through environment variables.
 | `P_CREATE_BURST` | `10` | pastes a client may create at once |
 | `P_CREATE_EVERY` | `2m` | then one per this interval |
 | `P_TRUST_PROXY` | `false` | take the client IP from `X-Real-Ip`; set only behind a proxy that overwrites it, as Traefik does |
+| `P_ALTCHA_HMAC_KEY` | (unset: no check) | key that signs ALTCHA challenges; setting it turns the form check on |
+| `P_ALTCHA_MAX_NUMBER` | `100000` | proof-of-work size: the browser hashes about half this many times |
 
 Changing `P_ID_FORMAT` only affects new pastes; links of every format keep
 working. ULIDs, unlike the other two, reveal when the paste was created to
@@ -101,7 +122,7 @@ so keep them at 10 or more.
 ## Deploying (Vultr VKE)
 
 The cluster runs rqlite, Traefik and cert-manager (see the opskit repo).
-`deploy/k8s/p.yaml` has everything else apart from one Secret in namespace
+`deploy/k8s/p.yaml` has everything else apart from two Secrets in namespace
 `p`, which you create once by hand. The image is public, so pulling it needs
 no credentials.
 
@@ -113,6 +134,10 @@ kubectl create namespace p
 kubectl -n p create secret generic p-rypt \
   --from-literal=P_RYPT_KEY_ID=<key uuid> \
   --from-literal=P_RYPT_TOKEN=<ry_… api key>
+
+# ALTCHA: any long random string
+kubectl -n p create secret generic p-altcha \
+  --from-literal=P_ALTCHA_HMAC_KEY="$(openssl rand -base64 32)"
 
 kubectl apply -f deploy/k8s/p.yaml
 ```

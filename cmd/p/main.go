@@ -41,6 +41,8 @@ type config struct {
 	trustProxy  bool
 	createBurst int
 	createEvery time.Duration
+	altchaKey   string
+	altchaMax   int
 }
 
 func loadConfig() (config, error) {
@@ -93,6 +95,8 @@ func loadConfig() (config, error) {
 		trustProxy:  trust,
 		createBurst: num("P_CREATE_BURST", 10),
 		createEvery: dur("P_CREATE_EVERY", 2*time.Minute),
+		altchaKey:   os.Getenv("P_ALTCHA_HMAC_KEY"), // optional: unset turns the check off
+		altchaMax:   num("P_ALTCHA_MAX_NUMBER", 100_000),
 	}
 	return c, errors.Join(errs...)
 }
@@ -143,6 +147,7 @@ func serve(log *slog.Logger) error {
 		Pastes: st, Ring: ring, IDs: gen,
 		BaseURL: cfg.baseURL, MaxBytes: cfg.maxBytes, TrustProxy: cfg.trustProxy,
 		CreateBurst: cfg.createBurst, CreateEvery: cfg.createEvery,
+		AltchaKey: cfg.altchaKey, AltchaMaxNumber: int64(cfg.altchaMax),
 		Log: log,
 	})
 	if err != nil {
@@ -167,7 +172,8 @@ func serve(log *slog.Logger) error {
 			log.Warn("shutting down", "err", err)
 		}
 	}()
-	log.Info("listening", "addr", cfg.listen, "version", version, "id_format", cfg.idFormat, "data_key", ring.Active())
+	log.Info("listening", "addr", cfg.listen, "version", version, "id_format", cfg.idFormat, "data_key", ring.Active(),
+		"altcha", cfg.altchaKey != "")
 	if err := hs.ListenAndServe(); !errors.Is(err, http.ErrServerClosed) {
 		return err
 	}

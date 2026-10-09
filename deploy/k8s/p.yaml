@@ -2,7 +2,8 @@
 #   - rqlite at rqlite.rqlite.svc.cluster.local (opskit),
 #   - Traefik as the default IngressClass and cert-manager's `letsencrypt`
 #     ClusterIssuer,
-#   - the Secret `p-rypt` in namespace p, created by hand (see README.md).
+#   - the Secrets `p-rypt` and `p-altcha` in namespace p, created by hand
+#     (see README.md).
 apiVersion: v1
 kind: Namespace
 metadata:
@@ -49,6 +50,8 @@ spec:
           envFrom:
             - secretRef:
                 name: p-rypt # P_RYPT_KEY_ID, P_RYPT_TOKEN
+            - secretRef:
+                name: p-altcha # P_ALTCHA_HMAC_KEY
           resources:
             requests:
               cpu: 10m

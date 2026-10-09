@@ -1,6 +1,6 @@
 module github.com/x6c-co/p-x6c-us
 
-go 1.27.0
+go 1.27.2
 
 require (
 	github.com/google/uuid v1.6.0
